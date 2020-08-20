@@ -1,0 +1,4 @@
+address: couchbase://localhost
+bucket: stats
+username: Administrator
+password: password
