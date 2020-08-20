@@ -114,10 +114,33 @@ begin
           stats["month"] = month
           stats["client"] = []
 
+          kafkacount = 0
+          scalacount = 0
+          sparkcount = 0
           items.each do |item|
-            client = { item["name"] => item["count"] }
-            stats["client"] << client
+            name  = item["name"].split('-')
+            if name[0] == "kafka"
+                kafkacount +=item["count"]
+            elsif name[0] == "spark"
+                sparkcount +=item["count"]
+            elsif name[0] == "scala"
+                scalacount +=item["count"]
+            else
+                 client = { item["name"] => item["count"] }
+                 stats["client"] << client
+            end
+
           end
+          client = { "kafka-connector" => kafkacount }
+          stats["client"] << client
+
+          client = { "scala" => scalacount }
+          stats["client"] << client
+
+          client = { "spark-connector" => sparkcount }
+          stats["client"] << client
+
+
 
           output  = {
               stats: stats,
