@@ -5,6 +5,7 @@ require 'json'
 require 'io/console'
 require 'active_support/core_ext'
 require 'date'
+require 'open3'
 
 require_relative 'storage'
 
@@ -305,6 +306,73 @@ rescue => ex
 end
 end
 
+def download_and_save_python_stats()
+begin
+  input  = Date.today.strftime("%Y%m")
+
+  year  = input.to_s[0,4]
+  month = input.to_s[4,2]
+  repo = "pypi"
+
+
+  component = "python-sdk"
+  cmd  = "pypinfo --json couchbase version"
+
+  source = nil
+
+  puts " Begin downloading #{repo} data  "
+  Open3.pipeline_rw cmd do |stdin, stdout, _ts|
+    out = stdout.read
+    source = JSON.parse(out)
+  end
+  Process.waitall
+  puts " Downloading #{repo} data completed. "
+  stats = Hash.new(0)
+
+  stats["type"] = repo
+  stats["year"] = year
+  stats["month"] = month
+  stats["client"] = []
+
+  version2count  = 0
+  version3count = 0
+  others = 0
+  count  = 0
+
+  source["rows"].each do |item|
+  version  = item["version"].to_s[0,1]
+
+    if version == "2"
+       version2count += item["download_count"]
+    elsif version == "3"
+       version3count += item["download_count"]
+    else
+       others += item["download_count"]
+    end
+    count+=item["download_count"]
+  end
+
+  stats["client"] << { "#{component}3.x"  => version3count}
+  stats["client"] << { "#{component}2.x"  => version2count}
+  stats["client"] << { "#{component}"  => others}
+  stats["total"] = count
+
+  output  = {
+      stats: stats,
+      source:source
+   }
+ puts " Save #{repo} data begin. "
+ save("#{input}::#{repo}", output)
+ puts " Save #{repo} data completed . "
+
+return output,true
+  #puts "output is " + source
+rescue => ex
+  puts  ex
+  return nil,false
+end
+end
+
 def save(key,stats)
   res = Storage.instance.collection.upsert(key,stats)
   #stats = Storage.instance.collection.get(stats)
@@ -317,6 +385,7 @@ def download()
     puts "Enter 2 for Nuget. "
     puts "Enter 3 for Npm. "
     puts "Enter 4 for Maven. "
+    puts "Enter 5 for python. "
     puts "Enter 10 for All. "
     puts "Press any other key to exit."
 
@@ -335,6 +404,8 @@ def download()
         puts "Enter the year and month for download format : yyyymm"
         downloadMonth = gets.strip
         download_and_save_maven_stats(downloadMonth)
+      when "5"
+        download_and_save_python_stats()
       when "10"
         puts "Enter the year and month for download format : yyyymm"
         downloadMonth = gets.strip
@@ -342,6 +413,7 @@ def download()
         download_and_save_nuget_stats()
         download_and_save_npm_stats(downloadMonth)
         download_and_save_maven_stats(downloadMonth)
+        download_and_save_python_stats()
       else
           puts "Good Bye.."
     end
