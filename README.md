@@ -1,4 +1,4 @@
-# couchbase-stats-downloader
+# couchbase-sdk-stats-downloader
 Written using Couchbase Ruby SDK, this tool downloads Couchbase stats from npm, maven, nuget, rubygems etc into Couchbase datastore
 
 For Maven download stats you will need sonatype account. The downloader will prompt you to enter the credentials when downloading Maven stats.
