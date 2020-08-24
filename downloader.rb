@@ -19,7 +19,7 @@ def download_and_save_rubygems_stats()
 
     year = input.to_s[0,4]
     month  = input.to_s[4,2]
-
+    lastupdate = DateTime.now.strftime("%Y-%m-%d %H:%M")
     uri = URI(url)
 
     Net::HTTP.start(uri.host, uri.port,
@@ -44,6 +44,7 @@ def download_and_save_rubygems_stats()
           stats["type"] = repo
           stats["year"] = year
           stats["month"] = month
+          stats["lastupdate"] = lastupdate
           stats["client"] = []
 
           count  = 0
@@ -84,6 +85,7 @@ begin
     uri = URI(url)
     year  = input.to_s[0,4]
     month  = input.to_s[4,2]
+    lastupdate = DateTime.now.strftime("%Y-%m-%d %H:%M")
 
     Net::HTTP.start(uri.host, uri.port,
       :use_ssl => uri.scheme == 'https',
@@ -113,6 +115,7 @@ begin
           stats["type"] = repo
           stats["year"] = year
           stats["month"] = month
+          stats["lastupdate"] = lastupdate
           stats["client"] = []
 
           kafkacount = 0
@@ -164,7 +167,7 @@ end
 
 end
 
-def download_and_save_npm_stats(input, component = "couchbase")
+def download_and_save_npm_stats(input)
 begin
     repo ="npm"
     year  = input.to_s[0,4]
@@ -172,10 +175,9 @@ begin
     startdate  = Date.new(year.to_i,month.to_i,1)
     enddate = startdate.end_of_month.strftime("%Y-%m-%d")
     startdate = startdate.strftime("%Y-%m-%d")
+    lastupdate = DateTime.now.strftime("%Y-%m-%d %H:%M")
 
-    url = "https://api.npmjs.org/downloads/range/#{startdate}:#{enddate}/#{component}"
-
-    component = (component == "couchbase") ? "node-sdk" : "ottoman"
+    url = "https://api.npmjs.org/downloads/range/#{startdate}:#{enddate}/couchbase,ottoman"
 
     uri = URI(url)
 
@@ -201,20 +203,31 @@ begin
           stats["year"] = year
           stats["month"] = month
           stats["client"] = []
+          stats["lastupdate"] = lastupdate
 
-          count  = 0
-          source["downloads"].each do |item|
-              count += item["downloads"]
+          ottomancount  = 0
+          nodecount  = 0
+          source["ottoman"]["downloads"].each do |item|
+              ottomancount += item["downloads"]
           end
 
-          stats["client"] << {component => count}
-          stats["total"] = count
+          stats["client"] << {"ottoman" => ottomancount}
+
+          source["couchbase"]["downloads"].each do |item|
+              nodecount += item["downloads"]
+          end
+
+          stats["client"] << {"node-sdk" => nodecount}
+
+          stats["total"] = nodecount + ottomancount
+
           output  = {
               stats: stats,
               source:source
            }
+
           puts " Save #{repo} data begin. "
-         save("#{input}::#{repo}", output)
+          save("#{input}::#{repo}", output)
           puts " Save #{repo} data completed . "
           return output,true
       else
@@ -228,17 +241,17 @@ rescue => ex
 end
 end
 
-def download_and_save_nuget_stats(component = "CouchbaseNetClient")
+def download_and_save_nuget_stats()
 begin
     input  = Date.today.strftime("%Y%m")
+    lastupdate = DateTime.now.strftime("%Y-%m-%d %H:%M")
+    client = ["CouchbaseNetClient","Linq2Couchbase","CouchbaseAspNet"]
 
     year  = input.to_s[0,4]
     month = input.to_s[4,2]
     repo = "nuget"
 
-    url = "https://api-v2v3search-0.nuget.org/query?q=packageid:#{component}"
-
-    component = (component == "CouchbaseNetClient") ? "dotnet-sdk" : "Linq"
+    url = "https://api-v2v3search-0.nuget.org/query?q=owner:couchbase"
 
     uri = URI(url)
 
@@ -263,28 +276,29 @@ begin
           stats["type"] = repo
           stats["year"] = year
           stats["month"] = month
+          stats["lastupdate"] = lastupdate
           stats["client"] = []
 
-          version2count  = 0
-          version3count = 0
-          others = 0
+          source["data"].each do |ele|
 
-          source["data"][0]["versions"].each do |item|
-            version  = item["version"].to_s[0,1]
+            count = 0
 
-            if version == "2"
-               version2count += item["downloads"]
-            elsif version == "3"
-               version3count += item["downloads"]
-            else
-               others += item["downloads"]
-            end
-          end
+             if client.any?(ele["id"])
 
-          stats["client"] << { "#{component}3.x"  => version3count}
-          stats["client"] << { "#{component}2.x"  => version2count}
-          stats["client"] << { "#{component}"  => others}
-          stats["total"] = source["data"][0]["totalDownloads"]
+                ele["versions"].each do |item|
+                  version  = item["version"].to_s[0,3].to_f
+                  if ele["id"] == "CouchbaseNetClient"
+                    if version >= 2.7
+                      count += item["downloads"]
+                    end
+                  else
+                    count += item["downloads"]
+                  end
+                end
+                stats["client"] << { "#{ele["id"]}"  => count}            
+                stats["total-#{ele["id"]}"] = ele["totalDownloads"]
+              end
+           end
 
           output  = {
               stats: stats,
@@ -313,7 +327,7 @@ begin
   year  = input.to_s[0,4]
   month = input.to_s[4,2]
   repo = "pypi"
-
+  lastupdate = DateTime.now.strftime("%Y-%m-%d %H:%M")
 
   component = "python-sdk"
   cmd  = "pypinfo --json couchbase version"
@@ -332,6 +346,7 @@ begin
   stats["type"] = repo
   stats["year"] = year
   stats["month"] = month
+  stats["lastupdate"] = lastupdate
   stats["client"] = []
 
   version2count  = 0
@@ -375,7 +390,6 @@ end
 
 def save(key,stats)
   res = Storage.instance.collection.upsert(key,stats)
-  #stats = Storage.instance.collection.get(stats)
 end
 
 def download()
