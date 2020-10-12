@@ -17,8 +17,8 @@ def download_and_save_rubygems_stats()
     repo = "rubygems"
     url = "https://rubygems.org/api/v1/versions/couchbase.json"
 
-    year = input.to_s[0,4]
-    month  = input.to_s[4,2]
+    year = input.to_s[0,4].to_i
+    month  = input.to_s[4,2].to_i
     lastupdate = DateTime.now.strftime("%Y-%m-%d %H:%M")
     uri = URI(url)
 
@@ -83,8 +83,8 @@ begin
     url = "https://oss.sonatype.org/service/local/stats/slices?p=141f284649826b&g=com.couchbase.client&t=raw&from=#{input}&nom=1"
     repo = "maven"
     uri = URI(url)
-    year  = input.to_s[0,4]
-    month  = input.to_s[4,2]
+    year  = input.to_s[0,4].to_i
+    month  = input.to_s[4,2].to_i
     lastupdate = DateTime.now.strftime("%Y-%m-%d %H:%M")
 
     Net::HTTP.start(uri.host, uri.port,
@@ -170,8 +170,8 @@ end
 def download_and_save_npm_stats(input)
 begin
     repo ="npm"
-    year  = input.to_s[0,4]
-    month = input.to_s[4,2]
+    year  = input.to_s[0,4].to_i
+    month = input.to_s[4,2].to_i
     startdate  = Date.new(year.to_i,month.to_i,1)
     enddate = startdate.end_of_month.strftime("%Y-%m-%d")
     startdate = startdate.strftime("%Y-%m-%d")
@@ -247,8 +247,8 @@ begin
     lastupdate = DateTime.now.strftime("%Y-%m-%d %H:%M")
     client = ["CouchbaseNetClient","Linq2Couchbase","CouchbaseAspNet"]
 
-    year  = input.to_s[0,4]
-    month = input.to_s[4,2]
+    year  = input.to_s[0,4].to_i
+    month = input.to_s[4,2].to_i
     repo = "nuget"
 
     url = "https://api-v2v3search-0.nuget.org/query?q=owner:couchbase"
@@ -295,7 +295,7 @@ begin
                     count += item["downloads"]
                   end
                 end
-                stats["client"] << { "#{ele["id"]}"  => count}            
+                stats["client"] << { "#{ele["id"]}"  => count}
                 stats["total-#{ele["id"]}"] = ele["totalDownloads"]
               end
            end
@@ -324,8 +324,8 @@ def download_and_save_python_stats()
 begin
   input  = Date.today.strftime("%Y%m")
 
-  year  = input.to_s[0,4]
-  month = input.to_s[4,2]
+  year  = input.to_s[0,4].to_i
+  month = input.to_s[4,2].to_i
   repo = "pypi"
   lastupdate = DateTime.now.strftime("%Y-%m-%d %H:%M")
 
@@ -388,6 +388,72 @@ rescue => ex
 end
 end
 
+def download_and_save_gocenter_stats(input)
+begin
+    url = "https://search.gocenter.io/api/ui/moduleinfo?module=github.com/couchbase/gocb/v2"
+    repo = "gocenter"
+    uri = URI(url)
+    year  = input.to_s[0,4].to_i
+    month = input.to_s[4,2].to_i
+
+    Net::HTTP.start(uri.host, uri.port,
+      :use_ssl => uri.scheme == 'https',
+      :verify_mode => OpenSSL::SSL::VERIFY_NONE) do |http|
+
+      request = Net::HTTP::Get.new uri.request_uri
+
+      request["Accept"] =  'application/json'
+
+      puts " Begin downloading #{repo} data from #{url} "
+      response = http.request request # Net::HTTPResponse object
+
+      if response.code == "200"
+          puts " Downloading #{repo} data completed. "
+          source = JSON.parse(response.body)
+
+          items  = source["weekly_download"]
+
+
+          stats = Hash.new(0)
+
+          stats["type"] = repo
+          stats["year"] = year
+          stats["month"] = month
+          count  = 0
+          stats["client"] = []
+          items.each {
+            |item|
+
+            statMonth = DateTime.parse(item["weekstarting"]).month
+            if(statMonth == month)
+              count += item["downloads"]
+            end
+
+          }
+          client = { "go" => count }
+          stats["client"] << client
+          stats["total"] = count
+          output  = {
+              stats: stats,
+              source:source
+           }
+           puts " Save #{repo} data begin. "
+            save("#{input}::#{repo}", output)
+           puts " Save #{repo} data completed . "
+
+          return output,true
+      else
+         puts response
+          return nil,false
+      end
+   end
+rescue => ex
+  puts ex
+  return nil,false
+end
+
+end
+
 def save(key,stats)
   res = Storage.instance.collection.upsert(key,stats)
 end
@@ -399,7 +465,8 @@ def download()
     puts "Enter 2 for Nuget. "
     puts "Enter 3 for Npm. "
     puts "Enter 4 for Maven. "
-    puts "Enter 5 for python. "
+    puts "Enter 5 for Python. "
+    puts "Enter 6 for Go. "
     puts "Enter 10 for All. "
     puts "Press any other key to exit."
 
@@ -420,6 +487,10 @@ def download()
         download_and_save_maven_stats(downloadMonth)
       when "5"
         download_and_save_python_stats()
+      when "6"
+        puts "Enter the year and month for download format : yyyymm"
+        downloadMonth = gets.strip
+        download_and_save_gocenter_stats(downloadMonth)
       when "10"
         puts "Enter the year and month for download format : yyyymm"
         downloadMonth = gets.strip
@@ -428,6 +499,7 @@ def download()
         download_and_save_npm_stats(downloadMonth)
         download_and_save_maven_stats(downloadMonth)
         download_and_save_python_stats()
+        download_and_save_gocenter_stats(downloadMonth)
       else
           puts "Good Bye.."
     end
